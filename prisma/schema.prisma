@@ -1,0 +1,21 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["oracle"]
+}
+
+datasource db {
+  provider = "oracle"
+  url      = env("DATABASE_URL") // Định dạng: oracle://user:password@host:port/service_name
+}
+
+model Translation {
+  id        Int      @id @default(autoincrement())
+  namespace String
+  key       String
+  lang      String
+  value     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([namespace, key, lang], name: "namespace_key_lang")
+}
