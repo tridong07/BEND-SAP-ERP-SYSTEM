@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Query } from '@nestjs/common';
 import { TranslationsService } from './translations.service';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { RegisterTranslationDto } from './dto/register-translation.dto'; // Import DTO
 
 @ApiTags('translations')
 @Controller('translations')
@@ -24,7 +25,7 @@ export class TranslationsController {
 
   @Post('register')
   @ApiOperation({ summary: 'Tự động đăng ký key mới' })
-  async registerKey(@Body() dto: { key: string, namespace: string, defaultValue?: string }) {
+  async registerKey(@Body() dto: RegisterTranslationDto) { // Sử dụng DTO ở đây
     return await this.translationsService.registerKey(dto);
   }
 }
