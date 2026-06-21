@@ -6,10 +6,12 @@ import OpenAI from 'openai';
 @Injectable()
 export class TranslationsService {
   private openai: OpenAI;
+  // Cache in-memory để tránh gọi DB/AI cho các key đã tồn tại
+  private static registeredKeysCache = new Set<string>();
 
   constructor(private readonly oracleService: OracleService) {
     this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY ?? '', // Sử dụng ?? để tránh undefined
+      apiKey: process.env.OPENAI_API_KEY ?? '',
     });
   }
 
@@ -25,9 +27,8 @@ export class TranslationsService {
       });
       return response.choices[0].message.content?.trim() ?? text;
     } catch (err) {
-      // Nếu gặp lỗi 429 (Rate Limit) hoặc lỗi khác, log lỗi và trả về văn bản gốc
-      console.error("⚠️ AI Translation skipped (Error/Quota):", err instanceof Error ? err.message : err);
-      return text; // Vẫn trả về giá trị gốc để hệ thống không bị lỗi
+      console.error("⚠️ AI Translation skipped:", err instanceof Error ? err.message : err);
+      return text;
     }
   }
 
@@ -35,29 +36,32 @@ export class TranslationsService {
     const sql = `SELECT namespace, key, lang, value FROM translations`;
     const rows: any = await this.oracleService.executeQuery(sql);
     
+    // Nạp toàn bộ key hiện có vào cache khi khởi động hệ thống
+    rows.forEach((r: any) => {
+      TranslationsService.registeredKeysCache.add(`${r.NAMESPACE}:${r.KEY}`);
+    });
+
     const result: { [key: string]: any } = { vi: {}, en: {} };
     rows.forEach((r: any) => {
-      const ns = r.NAMESPACE;
-      const key = r.KEY;
-      const lang = r.LANG;
-      const val = r.VALUE;
-
-      if (!result[lang][ns]) result[lang][ns] = {};
-      result[lang][ns][key] = val;
+      if (!result[r.LANG][r.NAMESPACE]) result[r.LANG][r.NAMESPACE] = {};
+      result[r.LANG][r.NAMESPACE][r.KEY] = r.VALUE;
     });
     return result;
   }
 
   async registerKey(dto: RegisterTranslationDto) {
-    // Ép kiểu chắc chắn là string bằng cách dùng ?? (Nullish Coalescing)
     const key = dto.key ?? 'unknown_key';
     const namespace = dto.namespace ?? 'common';
-    const defaultValue = dto.defaultValue ?? key;
+    const cacheKey = `${namespace}:${key}`;
 
-    // 1. Dịch bằng AI
+    // Kiểm tra Cache: Nếu đã có thì không làm gì cả
+    if (TranslationsService.registeredKeysCache.has(cacheKey)) {
+      return;
+    }
+
+    const defaultValue = dto.defaultValue ?? key;
     const translatedVal = await this.translateWithAI(defaultValue, "Vietnamese");
 
-    // 2. Lấy kết nối từ Pool
     const conn = await this.oracleService.getConnection();
 
     try {
@@ -69,13 +73,14 @@ export class TranslationsService {
           INSERT (namespace, key, lang, value) VALUES (src.ns, src.k, src.l, src.v)
       `;
 
-      // 3. Thực thi lưu
-      // Truyền đúng các giá trị đã được đảm bảo là string
       await conn.execute(sql, { ns: namespace, k: key, l: 'en', v: defaultValue }, { autoCommit: false });
       await conn.execute(sql, { ns: namespace, k: key, l: 'vi', v: translatedVal }, { autoCommit: false });
       
       await conn.commit();
-      console.log(`✅ Đã đăng ký key: ${key}`);
+      
+      // Thêm vào Cache sau khi đã lưu DB thành công
+      TranslationsService.registeredKeysCache.add(cacheKey);
+      console.log(`✅ Đã đăng ký key mới: ${cacheKey}`);
     } catch (err) {
       await conn.rollback();
       throw err;
