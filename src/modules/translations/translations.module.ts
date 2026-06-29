@@ -1,15 +1,12 @@
 import { Module } from '@nestjs/common';
 import { TranslationsController } from './translations.controller';
 import { TranslationsService } from './translations.service';
-import { OracleService } from '../../common/oracle.service'; 
+import { DatabaseModule } from '../../database/database.module'; // 1. Import Module chứa Service
 
 @Module({
-  imports: [], 
+  imports: [DatabaseModule], 
   controllers: [TranslationsController],
-  providers: [
-    TranslationsService, 
-    OracleService // ĐÂY LÀ DÒNG BẠN CẦN THÊM VÀO
-  ],
+  providers: [TranslationsService],
   exports: [TranslationsService],
 })
 export class TranslationsModule {}

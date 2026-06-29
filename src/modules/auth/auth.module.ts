@@ -1,13 +1,15 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
-import { ConfigModule, ConfigService } from '@nestjs/config'; // Import để dùng biến môi trường
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { PassportModule } from '@nestjs/passport'; // Cần thiết cho Guard
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-// import { OracleModule } from '../../common/oracle.module'; // Nếu bạn tách Oracle ra module riêng
+import { JwtStrategy } from './jwt.strategy'; // Import chiến lược bạn đã tạo
 
 @Module({
   imports: [
-    // 1. Dùng ConfigModule để lấy JWT_SECRET từ file .env
+    PassportModule, // Quan trọng để AuthGuard hoạt động
+    ConfigModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -16,10 +18,12 @@ import { AuthService } from './auth.service';
         signOptions: { expiresIn: '15m' },
       }),
     }),
-    // 2. Import các module khác nếu cần (ví dụ: UsersModule, DatabaseModule)
   ],
   controllers: [AuthController],
-  providers: [AuthService],
-  exports: [AuthService], // Export nếu các module khác cần gọi AuthService
+  providers: [
+    AuthService, 
+    JwtStrategy // Phải đăng ký Strategy tại đây
+  ],
+  exports: [AuthService],
 })
 export class AuthModule {}
